@@ -2,103 +2,37 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
   pull_request:
-    branches: [ main ]
-    
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 jobs:
-
   Linting:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.7", "3.8", "3.9"]
-        
+        python: ['3.8', '3.9', '3.10']
     steps:
       - uses: actions/checkout@v2
-      - name: Set up Python ${{ matrix.python-version }}
+      - uses: actions/setup-python@v2
+        with:
+          python-version: '3.10'
+      - run: python -m pip install flake8
+      - run: flake8 .
+  Build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Setup Python
         uses: actions/setup-python@v2
         with:
-          python-version: ${{ matrix.python-version }}
-
-      - uses: actions/cache@v2
+          python-version: ${{ matrix.python }}
+      - name: Cache
+        uses: actions/cache@v2
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip
-
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          make dev-lint
-      - name: Lint with isort, black, docformatter, flake8
-        run: |
-          make lint
-  Build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-        python-version: ["3.7", "3.8", "3.9"]
-        torchmetrics-version: ["0.11.4"]
-        ignore-lpips: ["false"]
-        include:
-          - os: ubuntu-latest
-            python-version: "3.9"
-            torchmetrics-version: "0.11.4"
-            ignore-lpips: "true"
-          - os: ubuntu-latest
-            python-version: "3.9"
-            torchmetrics-version: "0.6.0"
-            ignore-lpips: "false"
-          - os: ubuntu-latest
-            python-version: "3.9"
-            torchmetrics-version: "0.7.3"
-            ignore-lpips: "false"
-    env:
-      TORCHMETRICS: ${{ matrix.torchmetrics-version }}
-      IGNORE_LPIPS: ${{ matrix.ignore-lpips }}
-    
-    name: py${{ matrix.python-version  }}, torchmetrics-${{ matrix.torchmetrics-version }}, ignore-lpips-${{ matrix.ignore-lpips }}, ${{ matrix.os }}
-
-    timeout-minutes: 50
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install torch torchvision
-          if [[ $TORCHMETRICS == "latest" || -z $TORCHMETRICS ]]; then
-            echo "Installing latest torchmetrics"
-            pip install torchmetrics
-          else
-            pip install torchmetrics==$TORCHMETRICS
-          fi
-          make dev
-          pip install -e '.[alldev]'
-          if [[ $IGNORE_LPIPS == "true" ]]; then
-            pip uninstall -y lpips
-          fi
-
-      - name: Test with pytest
-        run: |
-          pip install pytest
-          pip install pytest-cov
-          MEDDLR_TEST_MODEL_ZOOS=True MEDDLR_TEST_DEPRECATED=True make test-cov
-
-      - name: Upload to codecov.io
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+      - name: Codecov Action
         uses: codecov/codecov-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          file: ./coverage.xml
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: true
